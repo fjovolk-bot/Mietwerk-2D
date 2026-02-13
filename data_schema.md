@@ -41,6 +41,7 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage` und Export/
   "condition": 74,
   "fixedCosts": 1800,
   "reserveMonthly": 700,
+  "opsDiscountWeeks": 2,
   "credit": {
     "remaining": 240000,
     "rate": 1900,
@@ -50,6 +51,7 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage` und Export/
 }
 ```
 
+## Unit (`properties[].units[]`)
 ## Einheitenstruktur (`properties[].units[]`)
 
 ```json
@@ -68,6 +70,9 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage` und Export/
 }
 ```
 
+`tenant` kann `null` sein.
+
+## Task (`tasks[]`)
 `tenant` kann auch `null` sein (Leerstand).
 
 ## Aufgabenstruktur (`tasks[]`)
@@ -92,6 +97,26 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage` und Export/
 }
 ```
 
+`status`: `offen` | `in_arbeit` | `erledigt`
+
+## Gebrauchtmarkt (`marketOffers[]`)
+
+```json
+{
+  "id": 133,
+  "name": "Restposten Bodenbelag",
+  "type": "renovation",
+  "price": 1700,
+  "effect": {
+    "wearMinus": 12
+  },
+  "risk": 0.2,
+  "hint": "-Abnutzung, mittleres Risiko",
+  "sold": false
+}
+```
+
+## Log (`log[]`)
 Mögliche `status`-Werte: `offen`, `in_arbeit`, `erledigt`.
 
 ## Logstruktur (`log[]`)
@@ -99,6 +124,10 @@ Mögliche `status`-Werte: `offen`, `in_arbeit`, `erledigt`.
 ```json
 {
   "week": 12,
+  "text": "Wohnung 2A ausgewählt.",
+  "type": "muted"
+}
+```
   "text": "Mieten eingezogen: 2.860 €.",
   "type": "good"
 }

@@ -18,6 +18,28 @@ Ein funktionsorientiertes 2D-Vermieter-Management-Spiel im Browser (Canvas + Van
 - Finanzen:
   - `Mieten einziehen`
   - `Kreditrate zahlen`
+- Verwaltung:
+  - `Objekt erstellen`
+  - `Einheit hinzufügen`
+  - `Inserat` (für ausgewählte Wohnung)
+  - `Miete erhöhen (Auswahl)`
+  - `Vermieten (Auswahl)`
+  - `Renovieren`
+  - `Aufgabe erstellen`
+- **Gebrauchtmarkt**:
+  - Jeden Monat neue Angebote
+  - Optionales Refresh gegen Gebühr
+  - Günstige Effekte mit Defekt-Risiko (kann Reparatur-Task auslösen)
+
+## Speichern / Laden
+- **Autosave** nach Ticks und wichtigen Aktionen.
+- `Speichern` / `Laden` via `localStorage`.
+- `Export JSON` / `Import JSON` über Textfeld.
+
+## Hinweise
+- Niedrige Zufriedenheit erhöht Mietausfall/Kündigungsrisiken.
+- Renovierung ist teuer, senkt aber Folgekosten/Risiken langfristig.
+- Gebrauchtmarkt kann stark helfen, ist aber nicht risikofrei.
 - Management:
   - `Objekt erstellen`
   - `Einheit hinzufügen`
