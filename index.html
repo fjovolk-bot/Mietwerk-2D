@@ -40,6 +40,14 @@
     h2 { font-size: 18px; }
     h3 { font-size: 15px; color: #dbeafe; }
     #cityCanvas { width: 100%; height: auto; border: 1px solid #6b7280; background: #0b1220; border-radius: 6px; display: block; }
+    #cityCanvas {
+      width: 100%;
+      height: auto;
+      border: 1px solid #6b7280;
+      background: #0b1220;
+      border-radius: 6px;
+      display: block;
+    }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     button {
       background: var(--panel-2);
@@ -57,6 +65,35 @@
     .scroll { max-height: 230px; overflow: auto; border: 1px solid #374151; border-radius: 6px; padding: 6px; background: #0f172a; font-size: 13px; }
     .item { border: 1px solid #374151; border-radius: 6px; padding: 6px; margin-bottom: 6px; background: #111827; }
     .item.selected { border-color: #60a5fa; box-shadow: inset 0 0 0 1px #60a5fa; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    .kpi {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 13px;
+    }
+    .kpi strong { display: block; font-size: 15px; margin-top: 4px; }
+    .scroll {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 6px;
+      background: #0f172a;
+      font-size: 13px;
+    }
+    .item {
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 6px;
+      margin-bottom: 6px;
+      background: #111827;
+    }
     .muted { color: var(--muted); }
     .good { color: var(--ok); }
     .warn { color: var(--warn); }
@@ -67,6 +104,19 @@
     }
     .pill { display: inline-block; padding: 2px 6px; border: 1px solid #475569; border-radius: 999px; font-size: 11px; }
     @media (max-width: 1200px) { body { grid-template-columns: 1fr; } }
+      width: 100%;
+      min-height: 85px;
+      background: #0f172a;
+      color: var(--text);
+      border: 1px solid #4b5563;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    @media (max-width: 1200px) {
+      body { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -74,7 +124,7 @@
     <div class="panel">
       <h1>Mietwerk 2D</h1>
       <canvas id="cityCanvas" width="540" height="360"></canvas>
-      <p class="muted">Objekt im Stadtplan klicken, dann Wohnung in der Liste anklicken (blau markiert).</p>
+      <p class="muted">Klicke auf ein Objekt im Stadtplan für Details und Aktionen.</p>
     </div>
 
     <div class="panel">
@@ -118,23 +168,13 @@
     <div class="panel">
       <h2 id="propertyTitle">Kein Objekt ausgewählt</h2>
       <div id="propertyDetails" class="scroll"></div>
-      <div id="selectedUnitLine" class="muted" style="margin-top:8px;">Ausgewählte Wohnung: keine</div>
       <div class="row" style="margin-top:8px;">
         <button id="btnAddUnit">Einheit hinzufügen</button>
         <button id="btnAd">Inserat</button>
         <button id="btnRenovate">Renovieren</button>
         <button id="btnTask">Aufgabe erstellen</button>
-        <button id="btnRaiseRent">Miete erhöhen (Auswahl)</button>
-        <button id="btnRentSelected">Vermieten (Auswahl)</button>
+        <button id="btnRaiseRent">Miete erhöhen</button>
       </div>
-    </div>
-
-    <div class="panel">
-      <h2>Gebrauchtmarkt</h2>
-      <div class="row" style="margin-bottom:8px;">
-        <button id="btnRefreshMarket">Angebote aktualisieren (300 €)</button>
-      </div>
-      <div id="marketList" class="scroll"></div>
     </div>
 
     <div class="panel">
@@ -145,9 +185,9 @@
 
 <script>
 (() => {
-  const SAVE_KEY = 'mietwerk2d_save_v2';
+  const SAVE_KEY = 'mietwerk2d_save_v1';
   const game = {
-    version: 2,
+    version: 1,
     week: 1,
     month: 1,
     cash: 120000,
@@ -157,11 +197,9 @@
     lastMonthSummary: { income: 0, expenses: 0, net: 0 },
     monthsWinningStreak: 0,
     selectedPropertyId: null,
-    selectedUnitId: null,
     nextId: 100,
     properties: [],
     tasks: [],
-    marketOffers: [],
     log: [],
     gameOver: false,
     victory: false
@@ -172,10 +210,8 @@
     ctx: document.getElementById('cityCanvas').getContext('2d'),
     logList: document.getElementById('logList'),
     taskList: document.getElementById('taskList'),
-    marketList: document.getElementById('marketList'),
     propertyTitle: document.getElementById('propertyTitle'),
     propertyDetails: document.getElementById('propertyDetails'),
-    selectedUnitLine: document.getElementById('selectedUnitLine'),
     gameStateLine: document.getElementById('gameStateLine'),
     box: document.getElementById('importExportBox'),
     kpiTime: document.getElementById('kpiTime'),
@@ -193,102 +229,81 @@
 
   function addLog(text, type = 'muted') {
     game.log.unshift({ week: game.week, text, type });
-    if (game.log.length > 150) game.log.pop();
-  }
-
-  function makeMarketOffer() {
-    const pool = [
-      {
-        name: 'Gebrauchte Heizungsventile', type: 'parts',
-        basePrice: rand(500, 1600), effect: { conditionPlus: 5 }, risk: 0.18,
-        hint: '+Zustand, kleines Ausfallrisiko'
-      },
-      {
-        name: 'Second-Hand Küchenpaket', type: 'furniture',
-        basePrice: rand(1200, 2800), effect: { satisfactionPlus: 6 }, risk: 0.12,
-        hint: '+Zufriedenheit bei Mieterwechsel'
-      },
-      {
-        name: 'Restposten Bodenbelag', type: 'renovation',
-        basePrice: rand(900, 2100), effect: { wearMinus: 12 }, risk: 0.2,
-        hint: '-Abnutzung, mittleres Risiko'
-      },
-      {
-        name: 'Gebrauchte Hausmeister-Ausrüstung', type: 'ops',
-        basePrice: rand(800, 1900), effect: { taskCostFactor: 0.9 }, risk: 0.1,
-        hint: '10% günstigerer Task-Abschluss für 1 Monat'
-      }
-    ];
-    const pick = pool[Math.floor(rand(0, pool.length))];
-    return {
-      id: gid(),
-      name: pick.name,
-      type: pick.type,
-      price: Math.round(pick.basePrice),
-      effect: pick.effect,
-      risk: pick.risk,
-      hint: pick.hint,
-      sold: false
-    };
-  }
-
-  function refreshMarket(initial = false) {
-    if (!initial) {
-      if (game.cash < 300) return addLog('Zu wenig Cash für Markt-Refresh.', 'bad');
-      game.cash -= 300;
-    }
-    game.marketOffers = [makeMarketOffer(), makeMarketOffer(), makeMarketOffer()];
-    addLog('Gebrauchtmarkt hat neue Angebote.', 'muted');
-    autosave();
-    render();
+    if (game.log.length > 120) game.log.pop();
   }
 
   function initialState() {
-    game.properties = [{
-      id: gid(), name: 'Wohnblock Nord', x: 1, y: 1,
-      value: 350000, condition: 74, fixedCosts: 1800, reserveMonthly: 700,
-      opsDiscountWeeks: 0,
-      credit: { remaining: 240000, rate: 1900, termMonths: 180 },
-      units: [
-        { id: gid(), label: '1A', rent: 950, deposit: 1900, wear: 32, isAdvertised: false, tenant: { name: 'Meier', satisfaction: 73, reliability: 89 } },
-        { id: gid(), label: '1B', rent: 890, deposit: 1780, wear: 38, isAdvertised: false, tenant: { name: 'Kaya', satisfaction: 68, reliability: 76 } },
-        { id: gid(), label: '2A', rent: 1020, deposit: 2040, wear: 40, isAdvertised: true, tenant: null }
-      ]
-    }];
+    game.properties = [
+      {
+        id: gid(),
+        name: 'Wohnblock Nord',
+        x: 1,
+        y: 1,
+        value: 350000,
+        condition: 74,
+        fixedCosts: 1800,
+        reserveMonthly: 700,
+        credit: { remaining: 240000, rate: 1900, termMonths: 180 },
+        units: [
+          {
+            id: gid(),
+            label: '1A', rent: 950, deposit: 1900, wear: 32, isAdvertised: false,
+            tenant: { name: 'Meier', satisfaction: 73, reliability: 89 }
+          },
+          {
+            id: gid(),
+            label: '1B', rent: 890, deposit: 1780, wear: 38, isAdvertised: false,
+            tenant: { name: 'Kaya', satisfaction: 68, reliability: 76 }
+          },
+          {
+            id: gid(),
+            label: '2A', rent: 1020, deposit: 2040, wear: 40, isAdvertised: true,
+            tenant: null
+          }
+        ]
+      }
+    ];
     game.selectedPropertyId = game.properties[0].id;
-    game.selectedUnitId = game.properties[0].units[0].id;
     game.tasks = [];
     game.log = [];
-    refreshMarket(true);
-    addLog('Willkommen bei Mietwerk 2D. Wohnung ist jetzt direkt auswählbar.', 'good');
-    addLog('Tipp: Gebrauchtmarkt nutzen für günstige, aber riskante Upgrades.', 'muted');
+    addLog('Willkommen bei Mietwerk 2D. Starte mit +1 Woche.', 'good');
+    addLog('Tipp: Inserat schalten und Mieter einziehen lassen.', 'muted');
   }
 
-  function getSelectedProperty() { return game.properties.find(p => p.id === game.selectedPropertyId) || null; }
-  function getSelectedUnit() {
-    const p = getSelectedProperty();
-    if (!p) return null;
-    return p.units.find(u => u.id === game.selectedUnitId) || null;
+  function getSelectedProperty() {
+    return game.properties.find(p => p.id === game.selectedPropertyId) || null;
   }
-  function allUnits() { return game.properties.flatMap(p => p.units.map(u => ({ p, u }))); }
+
+  function allUnits() {
+    return game.properties.flatMap(p => p.units.map(u => ({ p, u })));
+  }
+
   function occupancyRate() {
     const units = allUnits();
     if (!units.length) return 0;
-    return units.filter(x => x.u.tenant).length / units.length;
+    const occ = units.filter(x => x.u.tenant).length;
+    return occ / units.length;
   }
 
   function createTask(taskData) {
     const task = {
-      id: gid(), propertyId: taskData.propertyId, unitId: taskData.unitId || null,
-      type: taskData.type, cost: taskData.cost, duration: taskData.duration,
-      remainingWeeks: taskData.duration, priority: taskData.priority, status: 'offen',
-      createdWeek: game.week, effect: taskData.effect || {}
+      id: gid(),
+      propertyId: taskData.propertyId,
+      unitId: taskData.unitId || null,
+      type: taskData.type,
+      cost: taskData.cost,
+      duration: taskData.duration,
+      remainingWeeks: taskData.duration,
+      priority: taskData.priority,
+      status: 'offen',
+      createdWeek: game.week,
+      effect: taskData.effect || {}
     };
     game.tasks.push(task);
-    addLog(`Neue Aufgabe: ${task.type} (${task.priority}, ${euro(task.cost)}).`, 'warn');
+    addLog(`Neue Aufgabe: ${task.type} (Prio ${task.priority}, ${euro(task.cost)}).`, 'warn');
   }
 
-  // Kritische Tick-Logik
+  // Kritische Tick-Logik: Zeitfortschritt, Risiken, Aufgaben, Monatsabschluss
   function progressWeek() {
     if (game.gameOver || game.victory) return;
     game.week += 1;
@@ -302,26 +317,31 @@
 
     for (const p of game.properties) {
       p.condition = Math.max(0, p.condition - rand(0.1, 0.6));
-      if (p.opsDiscountWeeks > 0) p.opsDiscountWeeks -= 1;
-
       for (const u of p.units) {
         u.wear = Math.min(100, u.wear + rand(0.3, 1.0));
-        if (u.tenant) u.tenant.satisfaction = Math.max(0, u.tenant.satisfaction - rand(0.2, 1.0));
-        else if (u.isAdvertised && roll(0.25)) autoRentUnit(p, u);
+        if (u.tenant) {
+          u.tenant.satisfaction = Math.max(0, u.tenant.satisfaction - rand(0.2, 1.0));
+        } else if (u.isAdvertised && roll(0.25)) {
+          autoRentUnit(p, u);
+        }
       }
 
       const damageChance = Math.max(0.03, (100 - p.condition) / 900);
       if (roll(damageChance)) {
         p.condition = Math.max(0, p.condition - rand(2, 6));
-        createTask({ propertyId: p.id, type: 'Reparatur', cost: Math.round(rand(800, 2600)), duration: Math.ceil(rand(1, 3)), priority: ['Niedrig', 'Mittel', 'Hoch'][Math.floor(rand(0, 3))], effect: { conditionPlus: 8, satisfactionPlus: 3 } });
+        createTask({
+          propertyId: p.id,
+          type: 'Reparatur',
+          cost: Math.round(rand(800, 2600)),
+          duration: Math.ceil(rand(1, 3)),
+          priority: ['Niedrig', 'Mittel', 'Hoch'][Math.floor(rand(0, 3))],
+          effect: { conditionPlus: 8, satisfactionPlus: 3 }
+        });
         addLog(`Schaden in ${p.name}: Reparatur nötig.`, 'bad');
       }
     }
 
-    if (game.week % 4 === 0) {
-      finishMonth();
-      refreshMarket(true);
-    }
+    if (game.week % 4 === 0) finishMonth();
     evaluateState();
     autosave();
     render();
@@ -331,22 +351,27 @@
     task.status = 'erledigt';
     const p = game.properties.find(x => x.id === task.propertyId);
     if (!p) return;
-    const factor = p.opsDiscountWeeks > 0 ? 0.9 : 1;
-    game.cash -= task.cost * factor;
+    game.cash -= task.cost;
     if (task.effect.conditionPlus) p.condition = Math.min(100, p.condition + task.effect.conditionPlus);
     for (const u of p.units) {
-      if (u.tenant && task.effect.satisfactionPlus) u.tenant.satisfaction = Math.min(100, u.tenant.satisfaction + task.effect.satisfactionPlus);
+      if (u.tenant && task.effect.satisfactionPlus) {
+        u.tenant.satisfaction = Math.min(100, u.tenant.satisfaction + task.effect.satisfactionPlus);
+      }
       if (task.effect.wearMinus) u.wear = Math.max(0, u.wear - task.effect.wearMinus);
     }
-    addLog(`Aufgabe abgeschlossen: ${task.type} (${euro(task.cost * factor)}).`, 'good');
+    addLog(`Aufgabe abgeschlossen: ${task.type} (${euro(task.cost)}).`, 'good');
   }
 
   function autoRentUnit(property, unit) {
     const names = ['Schulz', 'Nguyen', 'Krüger', 'Yilmaz', 'Bauer', 'Almeida', 'Klein'];
-    unit.tenant = { name: names[Math.floor(rand(0, names.length))], satisfaction: Math.round(rand(55, 85)), reliability: Math.round(rand(60, 95)) };
+    unit.tenant = {
+      name: names[Math.floor(rand(0, names.length))],
+      satisfaction: Math.round(rand(55, 85)),
+      reliability: Math.round(rand(60, 95))
+    };
     unit.isAdvertised = false;
     game.cash += unit.deposit;
-    addLog(`Neue Vermietung: ${property.name}/${unit.label} an ${unit.tenant.name}.`, 'good');
+    addLog(`Neue Vermietung: ${property.name} / ${unit.label} an ${unit.tenant.name}.`, 'good');
   }
 
   function collectRents() {
@@ -359,7 +384,10 @@
         if (roll(defaultRisk)) {
           addLog(`Mietausfall bei ${p.name}/${u.label} (${u.tenant.name}).`, 'bad');
           u.tenant.satisfaction = Math.max(0, u.tenant.satisfaction - 8);
-          createTask({ propertyId: p.id, unitId: u.id, type: 'Mahnung', cost: 120, duration: 1, priority: 'Mittel', effect: { satisfactionPlus: -2 } });
+          createTask({
+            propertyId: p.id, unitId: u.id, type: 'Mahnung',
+            cost: 120, duration: 1, priority: 'Mittel', effect: { satisfactionPlus: -2 }
+          });
         } else {
           total += u.rent;
           u.tenant.satisfaction = Math.min(100, u.tenant.satisfaction + 1);
@@ -407,7 +435,7 @@
         }
       }
       expenses += autoPaid;
-      addLog('Kreditrate wurde automatisch abgebucht.', 'warn');
+      addLog('Kreditrate wurde automatisch abgebucht (kein manueller Klick).', 'warn');
     }
 
     for (const p of game.properties) {
@@ -415,7 +443,7 @@
         if (!u.tenant) continue;
         const leaveChance = Math.max(0.02, (55 - u.tenant.satisfaction) / 300);
         if (u.tenant.satisfaction < 55 && roll(leaveChance)) {
-          addLog(`${u.tenant.name} kündigt ${p.name}/${u.label}.`, 'bad');
+          addLog(`${u.tenant.name} kündigt ${p.name}/${u.label} wegen Unzufriedenheit.`, 'bad');
           u.tenant = null;
           u.isAdvertised = false;
         }
@@ -423,8 +451,12 @@
     }
 
     game.cash -= expenses;
-    game.lastMonthSummary = { income: game.monthlyRentCollected, expenses, net: game.monthlyRentCollected - expenses };
-    addLog(`Monatsabschluss M${game.month}: E ${euro(game.lastMonthSummary.income)}, A ${euro(expenses)}, Netto ${euro(game.lastMonthSummary.net)}.`, game.lastMonthSummary.net >= 0 ? 'good' : 'bad');
+    game.lastMonthSummary = {
+      income: game.monthlyRentCollected,
+      expenses,
+      net: game.monthlyRentCollected - expenses
+    };
+    addLog(`Monatsabschluss M${game.month}: Einnahmen ${euro(game.lastMonthSummary.income)}, Ausgaben ${euro(expenses)}, Netto ${euro(game.lastMonthSummary.net)}.`, game.lastMonthSummary.net >= 0 ? 'good' : 'bad');
 
     game.month += 1;
     game.monthlyRentCollected = 0;
@@ -433,39 +465,23 @@
 
   function evaluateState() {
     const occ = occupancyRate();
-    if (game.cash < 0) { game.gameOver = true; addLog('Game Over: Du bist bankrott.', 'bad'); }
+    if (game.cash < 0) {
+      game.gameOver = true;
+      addLog('Game Over: Du bist bankrott.', 'bad');
+    }
     if (game.cash > 250000 && occ >= 0.85) game.monthsWinningStreak += 1;
     else game.monthsWinningStreak = 0;
-    if (game.monthsWinningStreak >= 3) { game.victory = true; addLog('Sieg erreicht.', 'good'); }
+
+    if (game.monthsWinningStreak >= 3) {
+      game.victory = true;
+      addLog('Sieg: Finanzziele und Belegung über 3 Monate erreicht.', 'good');
+    }
   }
 
-  function buyMarketOffer(offerId) {
-    const offer = game.marketOffers.find(o => o.id === offerId && !o.sold);
+  function selectedOrWarn() {
     const p = getSelectedProperty();
-    if (!offer) return;
-    if (!p) return addLog('Markt-Kauf braucht ein ausgewähltes Objekt.', 'warn');
-    if (game.cash < offer.price) return addLog('Nicht genug Cash für dieses Angebot.', 'bad');
-
-    game.cash -= offer.price;
-    offer.sold = true;
-
-    if (offer.effect.conditionPlus) p.condition = Math.min(100, p.condition + offer.effect.conditionPlus);
-    if (offer.effect.taskCostFactor) p.opsDiscountWeeks = 4;
-
-    for (const u of p.units) {
-      if (offer.effect.wearMinus) u.wear = Math.max(0, u.wear - offer.effect.wearMinus);
-      if (u.tenant && offer.effect.satisfactionPlus) u.tenant.satisfaction = Math.min(100, u.tenant.satisfaction + offer.effect.satisfactionPlus);
-    }
-
-    if (roll(offer.risk)) {
-      createTask({ propertyId: p.id, type: 'Reparatur', cost: Math.round(offer.price * 0.35), duration: 1, priority: 'Mittel', effect: { conditionPlus: 4 } });
-      addLog(`Gebrauchtmarkt-Pech: ${offer.name} hatte Mängel.`, 'bad');
-    } else {
-      addLog(`Gebrauchtmarkt-Kauf: ${offer.name} für ${euro(offer.price)}.`, 'good');
-    }
-
-    autosave();
-    render();
+    if (!p) addLog('Bitte zuerst ein Objekt auf der Karte wählen.', 'warn');
+    return p;
   }
 
   function renderMap() {
@@ -473,9 +489,11 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const cell = 90;
 
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) {
-      ctx.strokeStyle = '#1f2937';
-      ctx.strokeRect(12 + x * cell, 12 + y * cell, cell - 10, cell - 10);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 6; x++) {
+        ctx.strokeStyle = '#1f2937';
+        ctx.strokeRect(12 + x * cell, 12 + y * cell, cell - 10, cell - 10);
+      }
     }
 
     for (const p of game.properties) {
@@ -505,9 +523,10 @@
     el.kpiReserve.textContent = euro(game.reserveBalance);
     el.kpiTasks.textContent = String(openTasks);
     el.kpiTasks.className = openTasks > 5 ? 'warn' : 'good';
+
     if (game.gameOver) el.gameStateLine.textContent = 'Status: GAME OVER';
     else if (game.victory) el.gameStateLine.textContent = 'Status: SIEG erreicht';
-    else el.gameStateLine.textContent = `Siegziel: Cash > 250.000 €, Belegung > 85% über 3 Monate (${game.monthsWinningStreak}/3).`;
+    else el.gameStateLine.textContent = `Siegbedingung: Cash > 250.000 €, Belegungsquote > 85% für 3 Monate (aktuell ${game.monthsWinningStreak}/3).`;
   }
 
   function renderProperty() {
@@ -515,101 +534,109 @@
     if (!p) {
       el.propertyTitle.textContent = 'Kein Objekt ausgewählt';
       el.propertyDetails.innerHTML = '<p class="muted">Bitte Objekt auf Karte anklicken.</p>';
-      el.selectedUnitLine.textContent = 'Ausgewählte Wohnung: keine';
       return;
     }
     el.propertyTitle.textContent = `${p.name} (${Math.round(p.condition)}% Zustand)`;
 
-    if (!p.units.find(u => u.id === game.selectedUnitId)) game.selectedUnitId = p.units[0]?.id || null;
-
     const unitsHtml = p.units.map(u => {
-      const tenant = u.tenant ? `${u.tenant.name} (Zufr. ${Math.round(u.tenant.satisfaction)}, Zuverl. ${Math.round(u.tenant.reliability)})` : '<span class="warn">Leerstand</span>';
-      const selectedCls = u.id === game.selectedUnitId ? 'selected' : '';
-      return `<div class="item ${selectedCls}">
-        <strong>Einheit ${u.label}</strong> <span class="pill">${u.id === game.selectedUnitId ? 'ausgewählt' : 'klickbar'}</span><br/>
-        Miete ${euro(u.rent)}, Abnutzung ${Math.round(u.wear)}%<br/>
-        Mieter: ${tenant}<br/>Inserat: ${u.isAdvertised ? 'aktiv' : 'aus'}
+      const tenant = u.tenant
+        ? `${u.tenant.name} (Zufr. ${Math.round(u.tenant.satisfaction)}, Zuverl. ${Math.round(u.tenant.reliability)})`
+        : '<span class="warn">Leerstand</span>';
+      return `<div class="item">
+        <strong>Einheit ${u.label}</strong> - Miete ${euro(u.rent)}, Abnutzung ${Math.round(u.wear)}%<br/>
+        Mieter: ${tenant}<br/>
+        Inserat: ${u.isAdvertised ? 'aktiv' : 'aus'}
         <div class="row" style="margin-top:4px;">
-          <button onclick="window.mw.selectUnit(${p.id}, ${u.id})">Auswählen</button>
-          <button onclick="window.mw.toggleAd(${p.id}, ${u.id})">Inserat</button>
           <button onclick="window.mw.rentUnit(${p.id}, ${u.id})">Vermieten</button>
           <button onclick="window.mw.raiseUnitRent(${p.id}, ${u.id})">Miete +5%</button>
+          <button onclick="window.mw.toggleAd(${p.id}, ${u.id})">Inserat umschalten</button>
         </div>
       </div>`;
     }).join('');
 
     el.propertyDetails.innerHTML = `
       <div class="item">Wert: ${euro(p.value)}<br/>Fixkosten/Monat: ${euro(p.fixedCosts)}<br/>Rücklage/Monat: ${euro(p.reserveMonthly)}<br/>Kredit: Rest ${euro(p.credit.remaining)}, Rate ${euro(p.credit.rate)}, Laufzeit ${p.credit.termMonths} Monate</div>
-      <h3>Einheiten (direkt auswählbar)</h3>${unitsHtml}
+      <h3>Einheiten</h3>
+      ${unitsHtml}
     `;
-
-    const su = getSelectedUnit();
-    el.selectedUnitLine.textContent = su ? `Ausgewählte Wohnung: ${su.label}` : 'Ausgewählte Wohnung: keine';
-  }
-
-  function renderMarket() {
-    if (!game.marketOffers.length) return el.marketList.innerHTML = '<p class="muted">Keine Angebote.</p>';
-    el.marketList.innerHTML = game.marketOffers.map(o => `
-      <div class="item ${o.sold ? 'muted' : ''}">
-        <strong>${o.name}</strong> ${o.sold ? '<span class="pill">gekauft</span>' : ''}<br/>
-        Preis: ${euro(o.price)} | Risiko: ${Math.round(o.risk * 100)}%<br/>
-        Effekt: ${o.hint}
-        <div class="row" style="margin-top:4px;">
-          <button ${o.sold ? 'disabled' : ''} onclick="window.mw.buyOffer(${o.id})">Kaufen</button>
-        </div>
-      </div>
-    `).join('');
   }
 
   function renderTasks() {
-    const openTasks = [...game.tasks].sort((a, b) => ({ Hoch: 3, Mittel: 2, Niedrig: 1 }[b.priority] - ({ Hoch: 3, Mittel: 2, Niedrig: 1 }[a.priority])));
-    if (!openTasks.length) return el.taskList.innerHTML = '<p class="muted">Keine Aufgaben vorhanden.</p>';
+    const openTasks = [...game.tasks].sort((a, b) => {
+      const pa = { Hoch: 3, Mittel: 2, Niedrig: 1 }[a.priority] || 0;
+      const pb = { Hoch: 3, Mittel: 2, Niedrig: 1 }[b.priority] || 0;
+      return pb - pa;
+    });
+    if (!openTasks.length) {
+      el.taskList.innerHTML = '<p class="muted">Keine Aufgaben vorhanden.</p>';
+      return;
+    }
     el.taskList.innerHTML = openTasks.map(t => {
       const p = game.properties.find(x => x.id === t.propertyId);
-      return `<div class="item"><strong>${t.type}</strong> [${t.status}]<br/>Objekt: ${p ? p.name : 'n/a'} | Prio: ${t.priority}<br/>Dauer: ${t.remainingWeeks}W | Kosten: ${euro(t.cost)}</div>`;
+      return `<div class="item">
+        <strong>${t.type}</strong> [${t.status}]<br/>
+        Objekt: ${p ? p.name : 'n/a'} | Prio: ${t.priority}<br/>
+        Dauer: ${t.remainingWeeks}W | Kosten: ${euro(t.cost)}
+      </div>`;
     }).join('');
   }
 
-  function renderLog() { el.logList.innerHTML = game.log.map(l => `<div class="item ${l.type}">[W${l.week}] ${l.text}</div>`).join(''); }
-  function render() { renderMap(); renderKPIs(); renderProperty(); renderMarket(); renderTasks(); renderLog(); }
+  function renderLog() {
+    el.logList.innerHTML = game.log.map(l => `<div class="item ${l.type}">[W${l.week}] ${l.text}</div>`).join('');
+  }
 
-  // Kritischer Save/Load-Block
-  function autosave() { localStorage.setItem(SAVE_KEY, JSON.stringify(game)); }
-  function manualSave() { autosave(); addLog('Manuell gespeichert.', 'good'); render(); }
+  function render() {
+    renderMap();
+    renderKPIs();
+    renderProperty();
+    renderTasks();
+    renderLog();
+  }
 
-  function hydrate(parsed) {
-    const keys = ['version','week','month','cash','reserveBalance','monthlyRentCollected','creditPaidThisMonth','lastMonthSummary','monthsWinningStreak','selectedPropertyId','selectedUnitId','nextId','properties','tasks','marketOffers','log','gameOver','victory'];
-    for (const k of keys) game[k] = parsed[k];
-    if (!Array.isArray(game.marketOffers)) game.marketOffers = [];
+  // Kritischer Save/Load-Block: kompletter State muss wiederherstellbar bleiben
+  function autosave() {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+  }
+
+  function manualSave() {
+    autosave();
+    addLog('Manuell gespeichert.', 'good');
+    render();
   }
 
   function manualLoad() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return addLog('Kein Speicherstand vorhanden.', 'warn');
-    try { hydrate(JSON.parse(raw)); addLog('Manuell geladen.', 'good'); render(); }
-    catch { addLog('Laden fehlgeschlagen: Savegame defekt.', 'bad'); }
+    try {
+      const parsed = JSON.parse(raw);
+      hydrate(parsed);
+      addLog('Manuell geladen.', 'good');
+      render();
+    } catch {
+      addLog('Laden fehlgeschlagen: Savegame defekt.', 'bad');
+    }
   }
 
-  function exportJSON() { el.box.value = JSON.stringify(game, null, 2); addLog('JSON-Export erstellt.', 'muted'); }
+  function hydrate(parsed) {
+    const keys = ['version','week','month','cash','reserveBalance','monthlyRentCollected','creditPaidThisMonth','lastMonthSummary','monthsWinningStreak','selectedPropertyId','nextId','properties','tasks','log','gameOver','victory'];
+    for (const k of keys) game[k] = parsed[k];
+  }
+
+  function exportJSON() {
+    el.box.value = JSON.stringify(game, null, 2);
+    addLog('JSON-Export erstellt.', 'muted');
+  }
+
   function importJSON() {
-    try { hydrate(JSON.parse(el.box.value)); autosave(); addLog('JSON-Import erfolgreich.', 'good'); render(); }
-    catch { addLog('Import fehlgeschlagen: ungültiges JSON.', 'bad'); }
-  }
-
-  function selectedOrWarn() {
-    const p = getSelectedProperty();
-    if (!p) addLog('Bitte zuerst ein Objekt auswählen.', 'warn');
-    return p;
-  }
-
-  function selectUnit(propertyId, unitId) {
-    const p = game.properties.find(x => x.id === propertyId);
-    const u = p?.units.find(x => x.id === unitId);
-    if (!p || !u) return;
-    game.selectedPropertyId = propertyId;
-    game.selectedUnitId = unitId;
-    addLog(`Wohnung ${u.label} ausgewählt.`, 'muted');
-    render();
+    try {
+      const parsed = JSON.parse(el.box.value);
+      hydrate(parsed);
+      autosave();
+      addLog('JSON-Import erfolgreich.', 'good');
+      render();
+    } catch {
+      addLog('Import fehlgeschlagen: ungültiges JSON.', 'bad');
+    }
   }
 
   function addProperty() {
@@ -617,11 +644,20 @@
     if (!name) return;
     const used = new Set(game.properties.map(p => `${p.x},${p.y}`));
     let x = 0, y = 0;
-    outer: for (let yy = 0; yy < 4; yy++) for (let xx = 0; xx < 6; xx++) if (!used.has(`${xx},${yy}`)) { x = xx; y = yy; break outer; }
-    const p = { id: gid(), name, x, y, value: 240000, condition: 80, fixedCosts: 1200, reserveMonthly: 500, opsDiscountWeeks: 0, credit: { remaining: 160000, rate: 1250, termMonths: 180 }, units: [] };
+    outer: for (let yy = 0; yy < 4; yy++) {
+      for (let xx = 0; xx < 6; xx++) {
+        if (!used.has(`${xx},${yy}`)) { x = xx; y = yy; break outer; }
+      }
+    }
+    const p = {
+      id: gid(), name, x, y,
+      value: 240000, condition: 80,
+      fixedCosts: 1200, reserveMonthly: 500,
+      credit: { remaining: 160000, rate: 1250, termMonths: 180 },
+      units: []
+    };
     game.properties.push(p);
     game.selectedPropertyId = p.id;
-    game.selectedUnitId = null;
     addLog(`Neues Objekt erstellt: ${name}.`, 'good');
     autosave(); render();
   }
@@ -633,10 +669,8 @@
     if (!label) return;
     const rent = Number(prompt('Monatsmiete in €:', '900'));
     if (!Number.isFinite(rent) || rent <= 0) return addLog('Ungültige Miete.', 'bad');
-    const unit = { id: gid(), label, rent, deposit: rent * 2, wear: 28, isAdvertised: false, tenant: null };
-    p.units.push(unit);
-    game.selectedUnitId = unit.id;
-    addLog(`Einheit ${label} hinzugefügt und ausgewählt.`, 'good');
+    p.units.push({ id: gid(), label, rent, deposit: rent * 2, wear: 28, isAdvertised: false, tenant: null });
+    addLog(`Einheit ${label} zu ${p.name} hinzugefügt.`, 'good');
     autosave(); render();
   }
 
@@ -650,7 +684,7 @@
     u.tenant = { name, satisfaction: 70, reliability: Math.round(rand(55, 95)) };
     u.isAdvertised = false;
     game.cash += u.deposit;
-    addLog(`${name} zieht in ${p.name}/${u.label} ein.`, 'good');
+    addLog(`${name} zieht in ${p.name}/${u.label} ein. Kaution ${euro(u.deposit)}.`, 'good');
     autosave(); render();
   }
 
@@ -662,7 +696,10 @@
     u.rent = Math.round(u.rent * 1.05);
     if (u.tenant) {
       u.tenant.satisfaction = Math.max(0, u.tenant.satisfaction - rand(5, 12));
-      if (u.tenant.satisfaction < 40 && roll(0.2)) { addLog(`${u.tenant.name} kündigt nach Mieterhöhung ${p.name}/${u.label}.`, 'bad'); u.tenant = null; }
+      if (u.tenant.satisfaction < 40 && roll(0.2)) {
+        addLog(`${u.tenant.name} kündigt nach Mieterhöhung ${p.name}/${u.label}.`, 'bad');
+        u.tenant = null;
+      }
     }
     addLog(`Miete erhöht: ${p.name}/${u.label} ${euro(old)} -> ${euro(u.rent)}.`, 'warn');
     autosave(); render();
@@ -673,7 +710,7 @@
     const u = p?.units.find(x => x.id === unitId);
     if (!u || u.tenant) return addLog('Inserat nur für leere Einheiten.', 'warn');
     u.isAdvertised = !u.isAdvertised;
-    addLog(`Inserat ${p.name}/${u.label}: ${u.isAdvertised ? 'aktiv' : 'inaktiv'}.`, 'muted');
+    addLog(`Inserat für ${p.name}/${u.label}: ${u.isAdvertised ? 'aktiv' : 'inaktiv'}.`, 'muted');
     autosave(); render();
   }
 
@@ -688,8 +725,15 @@
       u.wear = Math.max(0, u.wear - 22);
       if (u.tenant) u.tenant.satisfaction = Math.min(100, u.tenant.satisfaction + 7);
     });
-    createTask({ propertyId: p.id, type: 'Renovierung', cost: Math.round(cost * 0.15), duration: 2, priority: 'Mittel', effect: { conditionPlus: 7, wearMinus: 10, satisfactionPlus: 4 } });
-    addLog(`Renovierung in ${p.name} gestartet.`, 'good');
+    createTask({
+      propertyId: p.id,
+      type: 'Renovierung',
+      cost: Math.round(cost * 0.15),
+      duration: 2,
+      priority: 'Mittel',
+      effect: { conditionPlus: 7, wearMinus: 10, satisfactionPlus: 4 }
+    });
+    addLog(`Renovierung gestartet in ${p.name}: Direktkosten ${euro(cost)}.`, 'good');
     autosave(); render();
   }
 
@@ -715,7 +759,6 @@
       const py = 12 + p.y * cell;
       if (x >= px && x <= px + (cell - 10) && y >= py && y <= py + (cell - 10)) {
         game.selectedPropertyId = p.id;
-        game.selectedUnitId = p.units[0]?.id || null;
         render();
         break;
       }
@@ -723,7 +766,7 @@
   }
 
   function bind() {
-    document.getElementById('btnWeek').onclick = progressWeek;
+    document.getElementById('btnWeek').onclick = () => progressWeek();
     document.getElementById('btnMonth').onclick = () => { for (let i = 0; i < 4; i++) progressWeek(); };
     document.getElementById('btnCollect').onclick = collectRents;
     document.getElementById('btnCredit').onclick = payCreditRates;
@@ -735,29 +778,26 @@
     document.getElementById('btnAddUnit').onclick = addUnit;
     document.getElementById('btnAd').onclick = () => {
       const p = selectedOrWarn();
-      const u = getSelectedUnit();
-      if (!p || !u) return addLog('Bitte Wohnung auswählen.', 'warn');
-      toggleAd(p.id, u.id);
+      if (!p) return render();
+      const empty = p.units.find(u => !u.tenant);
+      if (!empty) return addLog('Keine freie Einheit vorhanden.', 'warn');
+      empty.isAdvertised = true;
+      addLog(`Inserat geschaltet für ${p.name}/${empty.label}.`, 'muted');
+      autosave(); render();
     };
     document.getElementById('btnRenovate').onclick = renovateProperty;
     document.getElementById('btnTask').onclick = createManualTask;
     document.getElementById('btnRaiseRent').onclick = () => {
       const p = selectedOrWarn();
-      const u = getSelectedUnit();
-      if (!p || !u) return addLog('Bitte Wohnung auswählen.', 'warn');
-      raiseUnitRent(p.id, u.id);
+      if (!p) return render();
+      const occupied = p.units.find(u => u.tenant);
+      if (!occupied) return addLog('Keine vermietete Einheit gefunden.', 'warn');
+      raiseUnitRent(p.id, occupied.id);
     };
-    document.getElementById('btnRentSelected').onclick = () => {
-      const p = selectedOrWarn();
-      const u = getSelectedUnit();
-      if (!p || !u) return addLog('Bitte Wohnung auswählen.', 'warn');
-      rentUnit(p.id, u.id);
-    };
-    document.getElementById('btnRefreshMarket').onclick = () => refreshMarket(false);
     el.canvas.addEventListener('click', mapClick);
   }
 
-  window.mw = { selectUnit, rentUnit, raiseUnitRent, toggleAd, buyOffer: buyMarketOffer };
+  window.mw = { rentUnit, raiseUnitRent, toggleAd };
 
   function boot() {
     const raw = localStorage.getItem(SAVE_KEY);

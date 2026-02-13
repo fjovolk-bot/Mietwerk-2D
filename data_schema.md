@@ -1,12 +1,12 @@
 # Savegame-Datenstruktur (Mietwerk 2D)
 
-Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Import).
+Der komplette Spielzustand wird als JSON gespeichert (`localStorage` und Export/Import).
 
-## Top-Level
+## Top-Level Felder
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "week": 12,
   "month": 4,
   "cash": 134500,
@@ -20,18 +20,16 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Imp
   },
   "monthsWinningStreak": 1,
   "selectedPropertyId": 100,
-  "selectedUnitId": 101,
-  "nextId": 140,
+  "nextId": 132,
   "properties": [],
   "tasks": [],
-  "marketOffers": [],
   "log": [],
   "gameOver": false,
   "victory": false
 }
 ```
 
-## Property (`properties[]`)
+## Objektstruktur (`properties[]`)
 
 ```json
 {
@@ -54,6 +52,7 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Imp
 ```
 
 ## Unit (`properties[].units[]`)
+## Einheitenstruktur (`properties[].units[]`)
 
 ```json
 {
@@ -74,6 +73,9 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Imp
 `tenant` kann `null` sein.
 
 ## Task (`tasks[]`)
+`tenant` kann auch `null` sein (Leerstand).
+
+## Aufgabenstruktur (`tasks[]`)
 
 ```json
 {
@@ -115,6 +117,9 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Imp
 ```
 
 ## Log (`log[]`)
+Mögliche `status`-Werte: `offen`, `in_arbeit`, `erledigt`.
+
+## Logstruktur (`log[]`)
 
 ```json
 {
@@ -123,3 +128,9 @@ Der komplette Spielzustand wird als JSON gespeichert (`localStorage`, Export/Imp
   "type": "muted"
 }
 ```
+  "text": "Mieten eingezogen: 2.860 €.",
+  "type": "good"
+}
+```
+
+`type` dient nur der UI-Farbgebung (z. B. `good`, `warn`, `bad`, `muted`).
